@@ -1,0 +1,6 @@
+{
+  "name": "BMK ZIKR APP",
+  "description": "Serene Zikr and Tasbih tally counter with Start, Pause, and Reset controls, animated bead progress ring, and dhikr presets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

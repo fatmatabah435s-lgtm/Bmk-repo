@@ -1,0 +1,75 @@
+name: Publish Precompiled APK Release
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-apk:
+    name: Publish Debug APK to GitHub Releases
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify precompiled APK artifact
+        id: verify_apk
+        run: |
+          if [ -s "dist/app-debug.apk" ]; then
+            APK_PATH="dist/app-debug.apk"
+          elif [ -s ".build-outputs/app-debug.apk" ]; then
+            APK_PATH=".build-outputs/app-debug.apk"
+          else
+            echo "Error: Precompiled debug APK not found at dist/app-debug.apk or .build-outputs/app-debug.apk."
+            exit 1
+          fi
+
+          unzip -tq "$APK_PATH"
+          APK_SIZE=$(stat -c%s "$APK_PATH")
+          APK_SHA256=$(sha256sum "$APK_PATH" | awk '{print $1}')
+
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "apk_size=$APK_SIZE" >> "$GITHUB_OUTPUT"
+          echo "apk_sha256=$APK_SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release with APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_PATH: ${{ steps.verify_apk.outputs.apk_path }}
+          APK_SIZE: ${{ steps.verify_apk.outputs.apk_size }}
+          APK_SHA256: ${{ steps.verify_apk.outputs.apk_sha256 }}
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          else
+            RELEASE_TAG="latest"
+          fi
+
+          RELEASE_NOTES=$(printf '%s\n' \
+            "Precompiled debug APK built natively in Google AI Studio." \
+            "" \
+            "- **Application Name:** BMK ZIKR APP" \
+            "- **Application ID:** \`com.aistudio.zikrtally.qvmrkx\`" \
+            "- **Version:** \`1.0\` (versionCode \`1\`)" \
+            "- **Artifact:** \`app-debug.apk\` (${APK_SIZE} bytes)" \
+            "- **SHA-256:** \`${APK_SHA256}\`")
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$APK_PATH" --clobber
+            gh release edit "$RELEASE_TAG" \
+              --title "BMK ZIKR APP Debug APK" \
+              --notes "$RELEASE_NOTES" \
+              --latest
+          else
+            gh release create "$RELEASE_TAG" "$APK_PATH" \
+              --target "${{ github.sha }}" \
+              --title "BMK ZIKR APP Debug APK" \
+              --notes "$RELEASE_NOTES" \
+              --latest
+          fi
+
+          echo "Direct APK Download URL: https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/app-debug.apk"
