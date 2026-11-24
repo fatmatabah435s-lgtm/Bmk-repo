@@ -16,15 +16,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Verify precompiled APK artifact
+      - name: Locate or reassemble precompiled APK artifact
         id: verify_apk
         run: |
           if [ -s "dist/app-debug.apk" ]; then
             APK_PATH="dist/app-debug.apk"
           elif [ -s ".build-outputs/app-debug.apk" ]; then
             APK_PATH=".build-outputs/app-debug.apk"
+          elif ls dist/apk_chunks/part_*.txt >/dev/null 2>&1; then
+            echo "Reassembling precompiled APK from dist/apk_chunks..."
+            mkdir -p /tmp/apk_out
+            APK_PATH="/tmp/apk_out/app-debug.apk"
+            LC_ALL=C cat dist/apk_chunks/part_*.txt | tr -d '\r\n' | base64 -d > "$APK_PATH"
+            if [ -s "dist/apk_chunks/apk.sha256" ]; then
+              EXPECTED_SHA=$(tr -d ' \r\n' < dist/apk_chunks/apk.sha256)
+              ACTUAL_SHA=$(sha256sum "$APK_PATH" | awk '{print $1}')
+              if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+                echo "Error: Reassembled APK SHA-256 mismatch ($ACTUAL_SHA != $EXPECTED_SHA)"
+                exit 1
+              fi
+            fi
           else
-            echo "Error: Precompiled debug APK not found at dist/app-debug.apk or .build-outputs/app-debug.apk."
+            echo "Error: Precompiled debug APK not found at dist/app-debug.apk, .build-outputs/app-debug.apk, or dist/apk_chunks/part_*.txt."
             exit 1
           fi
 
